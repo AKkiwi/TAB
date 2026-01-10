@@ -26,6 +26,16 @@ local function debugPrint(section, message)
     end
 end
 
+-- Fonction safe pour les appels potentiellement dangereux
+local function safeCall(func, errorContext)
+    local success, result = pcall(func)
+    if not success then
+        debugPrint("ERROR", errorContext .. ": " .. tostring(result))
+        return nil, result
+    end
+    return result, nil
+end
+
 local Players = game:GetService("Players")
 local RS = game:GetService("ReplicatedStorage")
 local UIS = game:GetService("UserInputService")
