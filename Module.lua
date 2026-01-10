@@ -211,14 +211,24 @@ local function create_toggle_button()
     stroke.Thickness = 3
     stroke.Parent = button
     
-    -- Toggle l'UI Rayfield
-    button.MouseButton1Click:Connect(function()
+    -- Toggle l'UI Rayfield (compatible mobile)
+    button.Activated:Connect(function()
         Rayfield:Toggle()
+        print("🎀 UI toggled!")
         
         -- Animation
         button.Size = UDim2.new(0, 55, 0, 55)
         task.wait(0.1)
         button.Size = UDim2.new(0, 60, 0, 60)
+    end)
+    
+    -- Feedback visuel
+    button.MouseButton1Down:Connect(function()
+        button.BackgroundColor3 = Color3.fromRGB(230, 170, 180)
+    end)
+    
+    button.MouseButton1Up:Connect(function()
+        button.BackgroundColor3 = Color3.fromRGB(255, 192, 203)
     end)
     
     -- Drag (mobile + PC)
