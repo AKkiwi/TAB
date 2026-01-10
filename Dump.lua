@@ -1230,7 +1230,7 @@ print("╔═══════════════════════�
 print("║  SECURITY AUDIT TOOL - ANDROID READY      ║")
 print("╚════════════════════════════════════════════╝")
 print("")
-print("✅ Launcher created (top-right)")
+print("✅ Launcher created (top-left)")
 print("📱 Optimized for mobile/touch")
 print("🔄 Draggable button")
 print("⏱️  ~3-5 seconds scan time")
