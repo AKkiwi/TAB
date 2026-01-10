@@ -57,10 +57,9 @@ local selected_eggs = {}
 local eggs = {}
 local flags = {
     auto_trade = false,
-    fair_option = "AddMore",
-    bad_option = "AddMore",
-    max_decline = 1,
     auto_trade_delay = 1,
+    accept_multiple_npc = false,  -- Nouveau
+    accept_multiple_mine = false, -- Nouveau
     auto_collect_cash = false,
     auto_collect_cash_delay = 1,
     auto_buy_eggs = false,
@@ -138,6 +137,9 @@ local function get_trade_info(customer)
     local npc_offer = frame:FindFirstChild("Them")
     if not npc_offer then return nil end
     
+    local your_offer = frame:FindFirstChild("You")
+    if not your_offer then return nil end
+    
     local fairness_meter = trade_gui:FindFirstChild("FairnessMeter")
     if not fairness_meter then return nil end
     
@@ -149,6 +151,7 @@ local function get_trade_info(customer)
     
     return {
         npc_offer = npc_offer,
+        your_offer = your_offer,
         trade_text = trade_text,
         position_scale = trade_fairness.Position.X.Scale
     }
@@ -157,11 +160,77 @@ end
 local function count_brainrots_in_offer(npc_offer)
     local count = 0
     for _, v in npc_offer:GetChildren() do
-        if v:IsA("Frame") and v.Name ~= "Icon" and v.Name ~= "Seperator" then
+        -- Ignorer Icon, Seperator, et CustomerExtra (+1)
+        if v:IsA("Frame") and v.Name ~= "Icon" and v.Name ~= "Seperator" and v.Name ~= "CustomerExtra" then
             count = count + 1
         end
     end
     return count
+end
+
+-- Extraire le prix d'un brainrot depuis le texte (ex: "$645/s" -> 645)
+local function extract_price_from_text(text)
+    if not text then return 0 end
+    local price = string.match(text, "%$([%d%.]+)")
+    return tonumber(price) or 0
+end
+
+-- Calculer la valeur totale d'une offre
+local function calculate_offer_value(offer_frame)
+    local total = 0
+    for _, item in offer_frame:GetChildren() do
+        if item:IsA("Frame") and item.Name ~= "Icon" and item.Name ~= "Seperator" and item.Name ~= "CustomerExtra" then
+            -- Chercher le TextLabel avec le prix
+            for _, child in item:GetDescendants() do
+                if child:IsA("TextLabel") and child.Text:find("%$") then
+                    local price = extract_price_from_text(child.Text)
+                    total = total + price
+                    break
+                end
+            end
+        end
+    end
+    return total
+end
+
+-- Nouvelle logique de trade basée sur les prix
+local function evaluate_trade(trade_info)
+    local npc_offer = trade_info.npc_offer
+    local your_offer = trade_info.your_offer
+    
+    if not npc_offer or not your_offer then
+        return nil, "Missing offer data"
+    end
+    
+    local npc_brainrot_count = count_brainrots_in_offer(npc_offer)
+    local my_brainrot_count = count_brainrots_in_offer(your_offer)
+    
+    -- Vérifier les options pour trades multiples
+    if npc_brainrot_count >= 2 and not flags.accept_multiple_npc then
+        return "Decline", "NPC has 2+ brainrots (option disabled)"
+    end
+    
+    if my_brainrot_count >= 2 and not flags.accept_multiple_mine then
+        return "Decline", "You have 2+ brainrots (option disabled)"
+    end
+    
+    -- Calculer les valeurs totales
+    local npc_value = calculate_offer_value(npc_offer)
+    local my_value = calculate_offer_value(your_offer)
+    
+    print(string.format("💰 Trade Evaluation: NPC=$%.1f/s vs MY=$%.1f/s", npc_value, my_value))
+    
+    -- Logique de décision basée sur les prix
+    if my_value < npc_value then
+        -- Je gagne au change
+        return "Accept", string.format("Good trade! (+$%.1f/s)", npc_value - my_value)
+    elseif my_value > npc_value then
+        -- Je perds au change
+        return "Decline", string.format("Bad trade! (-$%.1f/s)", my_value - npc_value)
+    else
+        -- Égalité
+        return "AddMore", "Equal trade, requesting more"
+    end
 end
 
 -- Fonction pour dump le contenu du trade
@@ -186,7 +255,9 @@ local function dump_trade_contents()
         -- NPC Offer (ce qu'ils proposent)
         local npc_offer = frame:FindFirstChild("Them")
         if npc_offer then
-            print("  🎁 NPC OFFERS:")
+            local npc_value = calculate_offer_value(npc_offer)
+            local npc_count = count_brainrots_in_offer(npc_offer)
+            print(string.format("  🎁 NPC OFFERS: %d brainrot(s), Total: $%.1f/s", npc_count, npc_value))
             for _, item in npc_offer:GetChildren() do
                 if item:IsA("Frame") then
                     print("    - " .. item.Name .. " (ClassName: " .. item.ClassName .. ")")
@@ -206,7 +277,9 @@ local function dump_trade_contents()
         -- Your Offer (ce que tu proposes)
         local your_offer = frame:FindFirstChild("You")
         if your_offer then
-            print("  💼 YOUR OFFERS:")
+            local my_value = calculate_offer_value(your_offer)
+            local my_count = count_brainrots_in_offer(your_offer)
+            print(string.format("  💼 YOUR OFFERS: %d brainrot(s), Total: $%.1f/s", my_count, my_value))
             for _, item in your_offer:GetChildren() do
                 if item:IsA("Frame") then
                     print("    - " .. item.Name .. " (ClassName: " .. item.ClassName .. ")")
@@ -232,6 +305,16 @@ local function dump_trade_contents()
                     print("  ⚖️ TRADE FAIRNESS: " .. trade_text.Text)
                     print("  📊 Position Scale: " .. trade_fairness.Position.X.Scale)
                 end
+            end
+        end
+        
+        -- Évaluation automatique
+        local trade_info = get_trade_info(customer)
+        if trade_info then
+            local action, reason = evaluate_trade(trade_info)
+            if action then
+                print("  🎯 RECOMMENDED ACTION: " .. action)
+                print("  📝 REASON: " .. reason)
             end
         end
         
@@ -367,12 +450,14 @@ local SettingsTab = Window:CreateTab("⚙️ Settings", 4483362458)
 local TradeSection = MainTab:CreateSection("Trade Automation")
 
 local auto_trade_connection
+local waiting_for_accept = false
 MainTab:CreateToggle({
     Name = "Auto Trade",
     CurrentValue = false,
     Flag = "AutoTrade",
     Callback = function(value)
         flags.auto_trade = value
+        waiting_for_accept = false
         
         if auto_trade_connection then
             auto_trade_connection:Disconnect()
@@ -390,79 +475,66 @@ MainTab:CreateToggle({
                     local trade_info = get_trade_info(customer)
                     if not trade_info then continue end
                     
-                    local brainrot_count = count_brainrots_in_offer(trade_info.npc_offer)
-                    
-                    if brainrot_count > flags.max_decline then
-                        safe_call(function()
-                            npc_trade_service:Clicked("Decline")
-                        end)
-                        last_trade_time = tick()
-                        break
-                    end
-                    
-                    local trade_text = trade_info.trade_text.Text
-                    local position_scale = trade_info.position_scale
-                    
-                    if trade_text == "Good Trade" or position_scale > 0.5 then
+                    -- Si on attend un accept après AddMore
+                    if waiting_for_accept then
                         safe_call(function()
                             npc_trade_service:Clicked("Accept")
+                            print("✅ Accepted after AddMore")
                         end)
-                        last_trade_time = tick()
-                        break
-                    elseif trade_text == "Fair Trade" then
-                        safe_call(function()
-                            npc_trade_service:Clicked(flags.fair_option)
-                        end)
-                        last_trade_time = tick()
-                        break
-                    elseif trade_text == "Bad Trade" then
-                        safe_call(function()
-                            npc_trade_service:Clicked(flags.bad_option)
-                        end)
+                        waiting_for_accept = false
                         last_trade_time = tick()
                         break
                     end
+                    
+                    -- Évaluer le trade avec la nouvelle logique
+                    local action, reason = evaluate_trade(trade_info)
+                    
+                    if not action then
+                        print("⚠️ Could not evaluate trade:", reason)
+                        continue
+                    end
+                    
+                    print("🎯 Action:", action, "-", reason)
+                    
+                    safe_call(function()
+                        npc_trade_service:Clicked(action)
+                        
+                        -- Si AddMore, préparer l'accept rapide
+                        if action == "AddMore" then
+                            waiting_for_accept = true
+                        end
+                    end)
+                    
+                    last_trade_time = tick()
+                    break
                 end
             end)
         end
     end,
 })
 
-MainTab:CreateDropdown({
-    Name = "If Fair Trade",
-    Options = {"Accept", "AddMore", "Decline"},
-    CurrentOption = "AddMore",
-    Flag = "FairOption",
-    Callback = function(option)
-        flags.fair_option = option
-    end,
-})
-
-MainTab:CreateDropdown({
-    Name = "If Bad Trade",
-    Options = {"Accept", "AddMore", "Decline"},
-    CurrentOption = "AddMore",
-    Flag = "BadOption",
-    Callback = function(option)
-        flags.bad_option = option
-    end,
-})
-
-MainTab:CreateSlider({
-    Name = "Decline If Over (Brainrots)",
-    Range = {1, 4},
-    Increment = 1,
-    CurrentValue = 1,
-    Flag = "MaxDecline",
+MainTab:CreateToggle({
+    Name = "Accept 2+ NPC Brainrots",
+    CurrentValue = false,
+    Flag = "AcceptMultipleNPC",
     Callback = function(value)
-        flags.max_decline = value
+        flags.accept_multiple_npc = value
+    end,
+})
+
+MainTab:CreateToggle({
+    Name = "Accept 2+ My Brainrots",
+    CurrentValue = false,
+    Flag = "AcceptMultipleMine",
+    Callback = function(value)
+        flags.accept_multiple_mine = value
     end,
 })
 
 MainTab:CreateSlider({
     Name = "Auto Trade Delay (seconds)",
-    Range = {1, 60},
-    Increment = 1,
+    Range = {0.5, 10},
+    Increment = 0.5,
     CurrentValue = 1,
     Flag = "AutoTradeDelay",
     Callback = function(value)
