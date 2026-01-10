@@ -328,9 +328,9 @@ end
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-    Name = "🎀 Astolfo Ware - Steal A Brainrot",
-    LoadingTitle = "Astolfo Ware",
-    LoadingSubtitle = "by Astolfo",
+    Name = "🎀 CuddlyTrain - Steal A Brainrot",
+    LoadingTitle = "CuddlyTrain Ware",
+    LoadingSubtitle = "by AK♥",
     ConfigurationSaving = {
         Enabled = true,
         FolderName = "AstolfoWare",
