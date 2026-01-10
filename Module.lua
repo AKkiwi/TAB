@@ -1,6 +1,7 @@
 --[[
     Steal A Brainrot Script - Rayfield UI Version
     Optimisé pour Android/Mobile
+    Nouvelle version
 ]]
 
 local start_tick = tick()
