@@ -865,15 +865,15 @@ buttonPanel.Position = UDim2.new(0, 0, 1, -70)
 buttonPanel.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 buttonPanel.BorderSizePixel = 0
 
--- Close button (plus grand)
+-- Close button
 local closeBtn = Instance.new("TextButton", buttonPanel)
-closeBtn.Size = UDim2.new(0, 150, 0, 50)
-closeBtn.Position = UDim2.new(1, -160, 0.5, -25)
+closeBtn.Size = UDim2.new(0, 100, 0, 50)
+closeBtn.Position = UDim2.new(1, -110, 0.5, -25)
 closeBtn.BackgroundColor3 = Color3.fromRGB(220, 60, 60)
 closeBtn.Text = "✖ CLOSE"
 closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 closeBtn.Font = Enum.Font.GothamBold
-closeBtn.TextSize = 16
+closeBtn.TextSize = 15
 
 local closeBtnCorner = Instance.new("UICorner", closeBtn)
 closeBtnCorner.CornerRadius = UDim.new(0, 8)
@@ -882,15 +882,50 @@ closeBtn.MouseButton1Click:Connect(function()
     gui:Destroy()
 end)
 
+-- Copy All button (NOUVEAU)
+local copyBtn = Instance.new("TextButton", buttonPanel)
+copyBtn.Size = UDim2.new(0, 120, 0, 50)
+copyBtn.Position = UDim2.new(0.5, -60, 0.5, -25)
+copyBtn.BackgroundColor3 = Color3.fromRGB(100, 200, 100)
+copyBtn.Text = "📄 COPY ALL"
+copyBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+copyBtn.Font = Enum.Font.GothamBold
+copyBtn.TextSize = 15
+
+local copyBtnCorner = Instance.new("UICorner", copyBtn)
+copyBtnCorner.CornerRadius = UDim.new(0, 8)
+
+copyBtn.MouseButton1Click:Connect(function()
+    -- Utilise setclipboard si disponible (la plupart des executors)
+    if setclipboard then
+        setclipboard(finalText)
+        copyBtn.Text = "✓ COPIED!"
+        copyBtn.BackgroundColor3 = Color3.fromRGB(50, 255, 50)
+        task.wait(2)
+        copyBtn.Text = "📄 COPY ALL"
+        copyBtn.BackgroundColor3 = Color3.fromRGB(100, 200, 100)
+    else
+        -- Fallback: sélectionne tout le texte
+        box:CaptureFocus()
+        box.CursorPosition = #box.Text + 1
+        box.SelectionStart = 1
+        copyBtn.Text = "✓ SELECTED"
+        copyBtn.BackgroundColor3 = Color3.fromRGB(50, 255, 50)
+        task.wait(2)
+        copyBtn.Text = "📄 COPY ALL"
+        copyBtn.BackgroundColor3 = Color3.fromRGB(100, 200, 100)
+    end
+end)
+
 -- Select button
 local selectBtn = Instance.new("TextButton", buttonPanel)
-selectBtn.Size = UDim2.new(0, 150, 0, 50)
+selectBtn.Size = UDim2.new(0, 100, 0, 50)
 selectBtn.Position = UDim2.new(0, 10, 0.5, -25)
 selectBtn.BackgroundColor3 = Color3.fromRGB(60, 150, 255)
 selectBtn.Text = "📋 SELECT"
 selectBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 selectBtn.Font = Enum.Font.GothamBold
-selectBtn.TextSize = 16
+selectBtn.TextSize = 15
 
 local selectBtnCorner = Instance.new("UICorner", selectBtn)
 selectBtnCorner.CornerRadius = UDim.new(0, 8)
@@ -899,9 +934,11 @@ selectBtn.MouseButton1Click:Connect(function()
     box:CaptureFocus()
     box.CursorPosition = #box.Text + 1
     box.SelectionStart = 1
-    selectBtn.Text = "✓ SELECTED"
+    selectBtn.Text = "✓ DONE"
+    selectBtn.BackgroundColor3 = Color3.fromRGB(80, 180, 255)
     task.wait(1.5)
     selectBtn.Text = "📋 SELECT"
+    selectBtn.BackgroundColor3 = Color3.fromRGB(60, 150, 255)
 end)
 
 -- Update scroll canvas
@@ -922,6 +959,7 @@ end
 
 addHover(closeBtn, Color3.fromRGB(220, 60, 60), Color3.fromRGB(255, 80, 80))
 addHover(selectBtn, Color3.fromRGB(60, 150, 255), Color3.fromRGB(80, 170, 255))
+addHover(copyBtn, Color3.fromRGB(100, 200, 100), Color3.fromRGB(120, 220, 120))
 
 -- Console output
 warn("╔════════════════════════════════════════════╗")
