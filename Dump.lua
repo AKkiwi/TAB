@@ -12,8 +12,19 @@
   5. Un rapport détaillé s'affiche
   
   Le bouton reste accessible pour relancer l'audit à tout moment
+  
+  ⚠️ DEBUG MODE: Active pour voir les erreurs détaillées
 ═══════════════════════════════════════════════════════════════
 --]]
+
+-- MODE DEBUG (change en true pour voir où ça plante)
+local DEBUG_MODE = true
+
+local function debugPrint(section, message)
+    if DEBUG_MODE then
+        print("[DEBUG - " .. section .. "] " .. message)
+    end
+end
 
 local Players = game:GetService("Players")
 local RS = game:GetService("ReplicatedStorage")
@@ -25,6 +36,11 @@ local char = player.Character or player.CharacterAdded:Wait()
 
 -- Fonction principale d'audit
 local function runSecurityAudit()
+    
+-- Réinitialise les variables
+char = player.Character or player.CharacterAdded:Wait()
+
+debugPrint("INIT", "Starting security audit...")
 
 local dump = {}
 local stats = {
@@ -49,6 +65,7 @@ log("")
 --------------------------------------------------
 -- 🔴 SECTION 1: REMOTES + DATASTORE PATTERNS
 --------------------------------------------------
+debugPrint("SECTION 1", "Scanning remotes...")
 header("1. REMOTE EVENTS + DATASTORE LEAK PATTERNS")
 
 local dangerousPatterns = {
@@ -1510,6 +1527,16 @@ launchButton.MouseButton1Click:Connect(function()
     -- Exécute l'audit dans un thread séparé
     task.spawn(function()
         local success, errorMsg = pcall(function()
+            debugPrint("MAIN", "Launching audit function...")
+            
+            -- Ferme l'ancien rapport s'il existe
+            local oldReport = player.PlayerGui:FindFirstChild("AdvancedSecurityAuditUI")
+            if oldReport then
+                debugPrint("CLEANUP", "Removing old report UI...")
+                oldReport:Destroy()
+                task.wait(0.1)
+            end
+            
             runSecurityAudit()
         end)
         
@@ -1523,7 +1550,54 @@ launchButton.MouseButton1Click:Connect(function()
             updateStatus("✓ Audit complete!", Color3.fromRGB(100, 255, 100))
         else
             updateStatus("✗ Error occurred", Color3.fromRGB(255, 100, 100))
-            warn("Audit Error:", errorMsg)
+            warn("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            warn("❌ AUDIT ERROR DETAILS:")
+            warn(tostring(errorMsg))
+            warn("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            
+            -- Affiche une UI d'erreur
+            local errorGui = Instance.new("ScreenGui")
+            errorGui.Name = "AuditErrorReport"
+            errorGui.Parent = player.PlayerGui
+            
+            local errorFrame = Instance.new("Frame", errorGui)
+            errorFrame.Size = UDim2.fromScale(0.5, 0.3)
+            errorFrame.Position = UDim2.fromScale(0.25, 0.35)
+            errorFrame.BackgroundColor3 = Color3.fromRGB(50, 20, 20)
+            errorFrame.BorderSizePixel = 3
+            errorFrame.BorderColor3 = Color3.fromRGB(255, 50, 50)
+            
+            local errorTitle = Instance.new("TextLabel", errorFrame)
+            errorTitle.Size = UDim2.new(1, 0, 0, 40)
+            errorTitle.BackgroundColor3 = Color3.fromRGB(30, 10, 10)
+            errorTitle.Text = "⚠️ AUDIT ERROR"
+            errorTitle.TextColor3 = Color3.fromRGB(255, 100, 100)
+            errorTitle.TextSize = 18
+            errorTitle.Font = Enum.Font.GothamBold
+            
+            local errorText = Instance.new("TextLabel", errorFrame)
+            errorText.Size = UDim2.new(1, -20, 1, -100)
+            errorText.Position = UDim2.new(0, 10, 0, 50)
+            errorText.BackgroundTransparency = 1
+            errorText.Text = "Error:\n" .. tostring(errorMsg) .. "\n\nCheck console (F9) for details"
+            errorText.TextColor3 = Color3.fromRGB(255, 200, 200)
+            errorText.TextSize = 14
+            errorText.Font = Enum.Font.Code
+            errorText.TextWrapped = true
+            errorText.TextXAlignment = Enum.TextXAlignment.Left
+            errorText.TextYAlignment = Enum.TextYAlignment.Top
+            
+            local closeError = Instance.new("TextButton", errorFrame)
+            closeError.Size = UDim2.new(0, 100, 0, 35)
+            closeError.Position = UDim2.new(0.5, -50, 1, -45)
+            closeError.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+            closeError.Text = "CLOSE"
+            closeError.TextColor3 = Color3.fromRGB(255, 255, 255)
+            closeError.Font = Enum.Font.GothamBold
+            closeError.TextSize = 14
+            closeError.MouseButton1Click:Connect(function()
+                errorGui:Destroy()
+            end)
         end
     end)
 end)
