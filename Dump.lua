@@ -168,13 +168,17 @@ for _, obj in ipairs(rsDescendants) do
             
             -- Détection de noms trop génériques
             if #name <= 4 or name:match("^event%d*$") or name:match("^remote%d*$") then
-                pattern("Generic name: " .. obj.Name)
+                -- Ignore les noms complètement vides
+                if #name > 0 then
+                    pattern("Generic name: " .. obj.Name)
+                end
             end
         elseif obj:IsA("BindableEvent") or obj:IsA("BindableFunction") then
+            -- Ne log pas les bindables internes en mode compact (trop de spam)
             if not COMPACT_MODE then
                 log("Bindable | " .. obj:GetFullName())
+                pattern("Internal comm: " .. obj.Name)
             end
-            pattern("Internal comm: " .. obj.Name)
         end
     end)
 end
@@ -483,21 +487,39 @@ end
 --------------------------------------------------
 header("8. MODULESCRIPTS")
 
-local criticalModules = 0
+local criticalModules = {}
+local allModules = 0
+
 for _, obj in ipairs(RS:GetDescendants()) do
     if obj:IsA("ModuleScript") then
+        allModules += 1
         local name = obj.Name:lower()
         if name:match("rng") or name:match("gacha") or name:match("luck") 
-        or name:match("config") or name:match("data") then
-            criticalModules += 1
+        or name:match("config") or name:match("data") or name:match("boost")
+        or name:match("enchant") or name:match("reset") or name:match("corrupt")
+        or name:match("item") or name:match("pack") then
             critical("Sensitive module: " .. obj.Name)
+            table.insert(criticalModules, obj.Name)
         end
     end
 end
 
-log("Critical modules found: " .. criticalModules)
-if criticalModules > 0 then
+log("Critical modules: " .. #criticalModules .. " / " .. allModules)
+
+if #criticalModules > 0 then
     vuln("Modules can be require()'d by exploits")
+    log("")
+    log("⚠️ Exposed Modules:")
+    for i, name in ipairs(criticalModules) do
+        if i <= 15 then
+            log("  • " .. name)
+        end
+    end
+    if #criticalModules > 15 then
+        log("  ... and " .. (#criticalModules - 15) .. " more")
+    end
+    log("")
+    log("🔧 Fix: Move these to ServerStorage")
 end
 
 --------------------------------------------------
@@ -505,28 +527,49 @@ end
 --------------------------------------------------
 header("9. WORKSPACE INTERACTIONS")
 
-local interactions = {click = 0, prox = 0, touch = 0}
+local interactions = {click = {}, prox = {}, touch = {}}
+local rngTriggers = {}
 
 for _, obj in ipairs(workspace:GetDescendants()) do
     if obj:IsA("ClickDetector") then
-        interactions.click += 1
+        table.insert(interactions.click, obj)
         if obj.MaxActivationDistance > 100 then
-            vuln("Excessive range ClickDetector")
+            vuln("Excessive range: " .. obj.Parent.Name)
         end
         local parent = obj.Parent
-        if parent and (parent.Name:lower():match("roll") or parent.Name:lower():match("spin")) then
+        if parent and (parent.Name:lower():match("roll") or parent.Name:lower():match("spin") 
+        or parent.Name:lower():match("hatch") or parent.Name:lower():match("egg")) then
             critical("Physical RNG trigger: " .. parent.Name)
+            table.insert(rngTriggers, parent.Name)
         end
     elseif obj:IsA("ProximityPrompt") then
-        interactions.prox += 1
+        table.insert(interactions.prox, obj)
+        local name = obj.Name:lower()
+        if name:match("roll") or name:match("spin") or name:match("hatch") or name:match("egg") then
+            critical("ProximityPrompt RNG: " .. obj.Name)
+            table.insert(rngTriggers, obj.Name)
+        end
     elseif obj:IsA("TouchTransmitter") then
-        interactions.touch += 1
+        table.insert(interactions.touch, obj)
     end
 end
 
-log("  ClickDetectors: " .. interactions.click)
-log("  ProximityPrompts: " .. interactions.prox)
-log("  TouchTransmitters: " .. interactions.touch)
+log("  ClickDetectors: " .. #interactions.click)
+log("  ProximityPrompts: " .. #interactions.prox)
+log("  TouchTransmitters: " .. #interactions.touch)
+
+if #rngTriggers > 0 then
+    log("")
+    log("🎰 Physical RNG Triggers Found:")
+    for i, name in ipairs(rngTriggers) do
+        if i <= 10 then
+            log("  • " .. name)
+        end
+    end
+    if #rngTriggers > 10 then
+        log("  ... and " .. (#rngTriggers - 10) .. " more")
+    end
+end
 
 --------------------------------------------------
 -- 🔴 SECTION 10: RNG SPECIFIC
@@ -682,19 +725,44 @@ end
 
 log("")
 log("Top Priorities:")
+local fixNumber = 1
 if #remotesByCategory.datastore > 0 then
-    log("  1. DataStore leaks (" .. #remotesByCategory.datastore .. ")")
+    log("  " .. fixNumber .. ". Move DataStore remotes to ServerScriptService")
+    fixNumber += 1
 end
 if #remotesByCategory.economy > 0 then
-    log("  2. Economy remotes (" .. #remotesByCategory.economy .. ")")
+    log("  " .. fixNumber .. ". Add validation to economy remotes (PurchasePack, etc)")
+    fixNumber += 1
 end
 if #remotesByCategory.rng > 0 then
-    log("  3. RNG triggers (" .. #remotesByCategory.rng .. ")")
+    log("  " .. fixNumber .. ". Server-side RNG calculation only")
+    fixNumber += 1
 end
 if #luckValues > 0 then
-    log("  4. Client luck values (" .. #luckValues .. ")")
+    log("  " .. fixNumber .. ". Remove client luck values (" .. #luckValues .. " found)")
+    fixNumber += 1
+end
+if #criticalModules > 0 then
+    log("  " .. fixNumber .. ". Move " .. #criticalModules .. " modules to ServerStorage")
+    fixNumber += 1
+end
+if leaderstats then
+    log("  " .. fixNumber .. ". Remove leaderstats or use server-only values")
+    fixNumber += 1
 end
 
+if fixNumber == 1 then
+    log("  ✅ No critical priorities detected!")
+end
+
+log("")
+log("🛠️ Concrete Actions:")
+log("  1. ReplicatedStorage → ServerStorage for sensitive modules")
+log("  2. Add server-side validation to ALL remotes")
+log("  3. Use RemoteEvent:FireClient() from server only")
+log("  4. Never store currency/stats in leaderstats")
+log("  5. All RNG rolls calculated server-side")
+log("  6. Rate limit remote calls (max 1/second per player)")
 log("")
 log("📚 Best Practices:")
 log("  • Never trust client input")
