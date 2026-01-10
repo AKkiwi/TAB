@@ -20,7 +20,10 @@
 -- MODE DEBUG (change en true pour voir où ça plante)
 local DEBUG_MODE = true
 
+local currentSection = "NONE"
+
 local function debugPrint(section, message)
+    currentSection = section
     if DEBUG_MODE then
         print("[DEBUG - " .. section .. "] " .. message)
     end
@@ -31,9 +34,42 @@ local function safeCall(func, errorContext)
     local success, result = pcall(func)
     if not success then
         debugPrint("ERROR", errorContext .. ": " .. tostring(result))
+        warn("⚠️ Error in section: " .. currentSection)
+        warn("⚠️ Context: " .. errorContext)
+        warn("⚠️ Details: " .. tostring(result))
         return nil, result
     end
     return result, nil
+end
+
+-- Fonction safe pour GetDescendants
+local function safeGetDescendants(parent, contextName)
+    local descendants = {}
+    local success, err = pcall(function()
+        descendants = parent:GetDescendants()
+    end)
+    
+    if not success then
+        debugPrint("ERROR", "Failed to get descendants from " .. contextName .. ": " .. tostring(err))
+        return {}
+    end
+    
+    debugPrint("SAFE_GET", contextName .. " returned " .. #descendants .. " objects")
+    return descendants
+end
+
+-- Fonction safe pour parcourir les descendants
+local function safeIterateDescendants(parent, contextName, callback)
+    debugPrint("ITERATE", "Starting iteration on " .. contextName)
+    local descendants = safeGetDescendants(parent, contextName)
+    
+    for i, obj in ipairs(descendants) do
+        pcall(function()
+            callback(obj, i)
+        end)
+    end
+    
+    debugPrint("ITERATE", "Finished iteration on " .. contextName .. " (" .. #descendants .. " objects)")
 end
 
 local Players = game:GetService("Players")
@@ -100,48 +136,57 @@ local remotesByCategory = {
     other = {}
 }
 
-for _, obj in ipairs(RS:GetDescendants()) do
-    if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
-        stats.remotes += 1
-        local name = obj.Name:lower()
-        local fullPath = obj:GetFullName()
-        local category = "other"
-        
-        -- Catégorisation intelligente
-        for _, keyword in ipairs(dangerousPatterns) do
-            if name:match(keyword) then
-                if keyword:match("save") or keyword:match("load") or keyword:match("data") 
-                or keyword:match("profile") or keyword:match("session") then
-                    category = "datastore"
-                    critical("DataStore pattern exposed: " .. obj.Name)
-                elseif keyword:match("give") or keyword:match("add") or keyword:match("reward") 
-                or keyword:match("purchase") then
-                    category = "economy"
-                    critical("Economy remote exposed: " .. obj.Name)
-                elseif keyword:match("roll") or keyword:match("spin") or keyword:match("hatch") 
-                or keyword:match("luck") then
-                    category = "rng"
-                    vuln("RNG trigger remote: " .. obj.Name)
-                elseif keyword:match("admin") or keyword:match("mod") or keyword:match("dev") then
-                    category = "admin"
-                    critical("ADMIN REMOTE EXPOSED: " .. obj.Name)
+debugPrint("SECTION 1", "Getting ReplicatedStorage descendants...")
+local rsDescendants = safeGetDescendants(RS, "ReplicatedStorage")
+
+debugPrint("SECTION 1", "Processing " .. #rsDescendants .. " objects...")
+
+for _, obj in ipairs(rsDescendants) do
+    pcall(function()
+        if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
+            stats.remotes += 1
+            local name = obj.Name:lower()
+            local fullPath = obj:GetFullName()
+            local category = "other"
+            
+            -- Catégorisation intelligente
+            for _, keyword in ipairs(dangerousPatterns) do
+                if name:match(keyword) then
+                    if keyword:match("save") or keyword:match("load") or keyword:match("data") 
+                    or keyword:match("profile") or keyword:match("session") then
+                        category = "datastore"
+                        critical("DataStore pattern exposed: " .. obj.Name)
+                    elseif keyword:match("give") or keyword:match("add") or keyword:match("reward") 
+                    or keyword:match("purchase") then
+                        category = "economy"
+                        critical("Economy remote exposed: " .. obj.Name)
+                    elseif keyword:match("roll") or keyword:match("spin") or keyword:match("hatch") 
+                    or keyword:match("luck") then
+                        category = "rng"
+                        vuln("RNG trigger remote: " .. obj.Name)
+                    elseif keyword:match("admin") or keyword:match("mod") or keyword:match("dev") then
+                        category = "admin"
+                        critical("ADMIN REMOTE EXPOSED: " .. obj.Name)
+                    end
+                    break
                 end
-                break
             end
+            
+            table.insert(remotesByCategory[category], obj)
+            log(obj.ClassName .. " | " .. fullPath .. " [" .. category:upper() .. "]")
+            
+            -- Détection de noms trop génériques (faciles à deviner)
+            if #name <= 4 or name:match("^event%d*$") or name:match("^remote%d*$") then
+                pattern("Generic remote name easy to bruteforce: " .. obj.Name)
+            end
+        elseif obj:IsA("BindableEvent") or obj:IsA("BindableFunction") then
+            log("Bindable | " .. obj:GetFullName())
+            pattern("Internal communication visible: " .. obj.Name)
         end
-        
-        table.insert(remotesByCategory[category], obj)
-        log(obj.ClassName .. " | " .. fullPath .. " [" .. category:upper() .. "]")
-        
-        -- Détection de noms trop génériques (faciles à deviner)
-        if #name <= 4 or name:match("^event%d*$") or name:match("^remote%d*$") then
-            pattern("Generic remote name easy to bruteforce: " .. obj.Name)
-        end
-    elseif obj:IsA("BindableEvent") or obj:IsA("BindableFunction") then
-        log("Bindable | " .. obj:GetFullName())
-        pattern("Internal communication visible: " .. obj.Name)
-    end
+    end)
 end
+
+debugPrint("SECTION 1", "Remotes scanned successfully")
 
 log("")
 log("📊 Remote Distribution:")
@@ -154,6 +199,7 @@ end
 --------------------------------------------------
 -- 🔴 SECTION 2: CLIENT VALUES + ATTRIBUTES
 --------------------------------------------------
+debugPrint("SECTION 2", "Scanning client values...")
 header("2. CLIENT-SIDE VALUES & ATTRIBUTES")
 
 local rngRelatedNames = {
@@ -193,7 +239,10 @@ local function checkValue(obj, location)
 end
 
 -- Player values
-for _, obj in ipairs(player:GetDescendants()) do
+debugPrint("SECTION 2", "Checking player descendants...")
+local playerDescendants = safeGetDescendants(player, "Player")
+
+for _, obj in ipairs(playerDescendants) do
     if obj:IsA("IntValue") or obj:IsA("NumberValue") or obj:IsA("BoolValue") 
     or obj:IsA("StringValue") then
         checkValue(obj, "Player")
@@ -202,7 +251,10 @@ end
 
 -- Character values
 if char then
-    for _, obj in ipairs(char:GetDescendants()) do
+    debugPrint("SECTION 2", "Checking character descendants...")
+    local charDescendants = safeGetDescendants(char, "Character")
+    
+    for _, obj in ipairs(charDescendants) do
         if obj:IsA("ValueBase") then
             checkValue(obj, "Character")
         end
@@ -214,27 +266,30 @@ log("")
 log("🔍 Attributes Analysis:")
 
 local function auditAttributes(parent, parentName)
-    local attrs = parent:GetAttributes()
     local count = 0
-    for name, value in pairs(attrs) do
-        count += 1
-        log("  " .. parentName .. "." .. name .. " = " .. tostring(value))
-        
-        local lowerName = name:lower()
-        for _, keyword in ipairs(rngRelatedNames) do
-            if lowerName:match(keyword) then
-                critical("RNG attribute on client: " .. name)
+    pcall(function()
+        local attrs = parent:GetAttributes()
+        for name, value in pairs(attrs) do
+            count += 1
+            log("  " .. parentName .. "." .. name .. " = " .. tostring(value))
+            
+            local lowerName = name:lower()
+            for _, keyword in ipairs(rngRelatedNames) do
+                if lowerName:match(keyword) then
+                    critical("RNG attribute on client: " .. name)
+                end
+            end
+            for _, keyword in ipairs(economyNames) do
+                if lowerName:match(keyword) then
+                    critical("Economy attribute on client: " .. name)
+                end
             end
         end
-        for _, keyword in ipairs(economyNames) do
-            if lowerName:match(keyword) then
-                critical("Economy attribute on client: " .. name)
-            end
-        end
-    end
+    end)
     return count
 end
 
+debugPrint("SECTION 2", "Checking attributes...")
 local playerAttrCount = auditAttributes(player, "Player")
 local charAttrCount = char and auditAttributes(char, "Character") or 0
 
@@ -245,6 +300,7 @@ end
 --------------------------------------------------
 -- 🔴 SECTION 3: LEADERSTATS (ECONOMY LEAK)
 --------------------------------------------------
+debugPrint("SECTION 3", "Checking leaderstats...")
 header("3. LEADERSTATS & ECONOMY EXPOSURE")
 
 local leaderstats = player:FindFirstChild("leaderstats")
@@ -261,14 +317,17 @@ end
 -- PlayerGui economy displays
 log("")
 log("UI Economy Elements:")
-for _, obj in ipairs(player.PlayerGui:GetDescendants()) do
-    if obj:IsA("TextLabel") then
-        local text = obj.Text:lower()
-        if text:match("coin") or text:match("gem") or text:match("cash") 
-        or text:match("%d+,?%d*") then -- Détecte les nombres formatés
-            pattern("Currency display in UI: " .. obj:GetFullName())
+local guiDescendants = safeGetDescendants(player.PlayerGui, "PlayerGui")
+for _, obj in ipairs(guiDescendants) do
+    pcall(function()
+        if obj:IsA("TextLabel") then
+            local text = obj.Text:lower()
+            if text:match("coin") or text:match("gem") or text:match("cash") 
+            or text:match("%d+,?%d*") then -- Détecte les nombres formatés
+                pattern("Currency display in UI: " .. obj:GetFullName())
+            end
         end
-    end
+    end)
 end
 
 --------------------------------------------------
