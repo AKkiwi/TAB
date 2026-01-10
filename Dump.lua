@@ -572,14 +572,9 @@ if char then
     -- Network ownership check
     log("")
     log("Network Ownership:")
-    for _, part in ipairs(char:GetDescendants()) do
-        if part:IsA("BasePart") then
-            local owner = part:GetNetworkOwner()
-            if owner == player then
-                vuln("Client owns: " .. part.Name)
-            end
-        end
-    end
+    log("⚠️ Network ownership can only be checked server-side")
+    log("  → Exploits can still manipulate unanchored parts")
+    log("  → Recommendation: Anchor important parts or use server validation")
 end
 
 --------------------------------------------------
@@ -1155,6 +1150,7 @@ if #fixes == 0 then
     log("  ✅ No critical fixes needed!")
 end
 
+-- Modules (SAFE - sans require pour éviter les erreurs)
 log("")
 log("📚 Best Practices:")
 log("  • Never trust client input")
@@ -1163,9 +1159,10 @@ log("  • Use remote rate limiting")
 log("  • Validate every argument")
 log("  • Log suspicious activity")
 log("  • Use ServerScriptService for logic")
-log("  • Encrypt important remotes names")
 log("  • Implement server-side cooldowns")
 log("  • Regular security audits")
+log("  • Never use GetNetworkOwner() client-side")
+log("  • Anchor important physics objects")
 
 --------------------------------------------------
 -- 💾 SAVE & DISPLAY
