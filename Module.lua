@@ -1,7 +1,6 @@
 --[[
     Steal A Brainrot Script - Rayfield UI Version
     Optimisé pour Android/Mobile
-    Nouvelle version
 ]]
 
 local start_tick = tick()
@@ -163,6 +162,83 @@ local function count_brainrots_in_offer(npc_offer)
         end
     end
     return count
+end
+
+-- Fonction pour dump le contenu du trade
+local function dump_trade_contents()
+    print("==================== TRADE DUMP ====================")
+    
+    for _, customer in customers:GetChildren() do
+        local head = customer:FindFirstChild("Head")
+        if not head then continue end
+        
+        local trade_gui = head:FindFirstChild("Trade")
+        if not trade_gui or not trade_gui.Enabled then continue end
+        
+        print("📦 Found active trade with:", customer.Name)
+        
+        local trade_brainrot_gui = trade_gui:FindFirstChild("Trade")
+        if not trade_brainrot_gui then continue end
+        
+        local frame = trade_brainrot_gui:FindFirstChild("Frame")
+        if not frame then continue end
+        
+        -- NPC Offer (ce qu'ils proposent)
+        local npc_offer = frame:FindFirstChild("Them")
+        if npc_offer then
+            print("  🎁 NPC OFFERS:")
+            for _, item in npc_offer:GetChildren() do
+                if item:IsA("Frame") then
+                    print("    - " .. item.Name .. " (ClassName: " .. item.ClassName .. ")")
+                    
+                    -- Chercher les détails de l'item
+                    for _, child in item:GetDescendants() do
+                        if child:IsA("TextLabel") then
+                            print("      └─ Text: " .. child.Text)
+                        elseif child:IsA("ImageLabel") then
+                            print("      └─ Image: " .. child.Image)
+                        end
+                    end
+                end
+            end
+        end
+        
+        -- Your Offer (ce que tu proposes)
+        local your_offer = frame:FindFirstChild("You")
+        if your_offer then
+            print("  💼 YOUR OFFERS:")
+            for _, item in your_offer:GetChildren() do
+                if item:IsA("Frame") then
+                    print("    - " .. item.Name .. " (ClassName: " .. item.ClassName .. ")")
+                    
+                    for _, child in item:GetDescendants() do
+                        if child:IsA("TextLabel") then
+                            print("      └─ Text: " .. child.Text)
+                        elseif child:IsA("ImageLabel") then
+                            print("      └─ Image: " .. child.Image)
+                        end
+                    end
+                end
+            end
+        end
+        
+        -- Trade Fairness
+        local fairness_meter = trade_gui:FindFirstChild("FairnessMeter")
+        if fairness_meter then
+            local trade_fairness = fairness_meter:FindFirstChild("TradeFairness")
+            if trade_fairness then
+                local trade_text = trade_fairness:FindFirstChild("TextLabel")
+                if trade_text then
+                    print("  ⚖️ TRADE FAIRNESS: " .. trade_text.Text)
+                    print("  📊 Position Scale: " .. trade_fairness.Position.X.Scale)
+                end
+            end
+        end
+        
+        print("====================================================")
+    end
+    
+    print("✅ Trade dump complete!")
 end
 
 -- Load Rayfield
@@ -661,6 +737,22 @@ SettingsTab:CreateButton({
         Rayfield:Notify({
             Title = "Current Balance",
             Content = "$" .. tostring(get_money()),
+            Duration = 4,
+            Image = 4483362458,
+        })
+    end,
+})
+
+-- Debug Section
+local DebugSection = SettingsTab:CreateSection("Debug Tools")
+
+SettingsTab:CreateButton({
+    Name = "Dump Trade Contents",
+    Callback = function()
+        dump_trade_contents()
+        Rayfield:Notify({
+            Title = "Trade Dump",
+            Content = "Check console (F9) for details!",
             Duration = 4,
             Image = 4483362458,
         })
